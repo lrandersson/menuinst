@@ -1,34 +1,17 @@
-import json
 import logging
 import os
 import shutil
 from pathlib import Path
-from subprocess import check_output
 from tempfile import TemporaryDirectory
 
 import py
 import pytest
-
-from menuinst.platforms.base import platform_key
 
 logging.basicConfig(level=logging.DEBUG)
 
 pytest_plugins = ("conda.testing.fixtures",)
 
 os.environ["PYTEST_IN_USE"] = "1"
-DATA = Path(__file__).parent / "data"
-LEGACY = Path(__file__).parent / "_legacy"
-PLATFORM = platform_key()
-
-
-def base_prefix():
-    prefix = os.environ.get("CONDA_ROOT", os.environ.get("MAMBA_ROOT_PREFIX"))
-    if not prefix:
-        prefix = json.loads(check_output(["conda", "info", "--json"]))["root_prefix"]
-    return prefix
-
-
-BASE_PREFIX = base_prefix()
 
 
 @pytest.fixture()

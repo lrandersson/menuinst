@@ -4,10 +4,11 @@ import json
 from typing import TYPE_CHECKING
 
 import pytest
-from conftest import DATA
 
 from menuinst.api import install, remove
 from menuinst.cli import main as menuinst_main
+
+from .helpers import DATA
 
 if TYPE_CHECKING:
     from pathlib import Path

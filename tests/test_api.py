@@ -14,12 +14,13 @@ from typing import Iterable, Tuple
 from xml.etree import ElementTree
 
 import pytest
-from conftest import DATA, PLATFORM
 
 from menuinst.api import install, remove
 from menuinst.platforms import MenuItem
 from menuinst.platforms.osx import _lsregister
 from menuinst.utils import DEFAULT_PREFIX, logged_run, slugify
+
+from .helpers import DATA, PLATFORM
 
 
 def _poll_for_file_contents(path, timeout=30):
@@ -358,7 +359,7 @@ def test_file_type_association(delete_files):
     assert output.strip().endswith(test_file)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Only run on macOS")
+@pytest.mark.skipif(PLATFORM != "osx", reason="Only run on macOS")
 @pytest.mark.skipif("CI" not in os.environ, reason="Only run on CI. Export CI=1 to run locally.")
 def test_file_type_association_no_event_handler(delete_files, request):
     test_file = "test.menuinst-no-event-handler"

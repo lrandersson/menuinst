@@ -12,10 +12,11 @@ from tempfile import NamedTemporaryFile
 
 import pytest
 from conda.models.version import VersionOrder
-from conftest import BASE_PREFIX, DATA, PLATFORM
 
 from menuinst._schema import validate
 from menuinst.platforms import Menu, MenuItem
+
+from .helpers import BASE_PREFIX, DATA, PLATFORM
 
 ENV_VARS = {
     k: v

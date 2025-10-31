@@ -1,9 +1,10 @@
 import os
 
 import pytest
-from conftest import DATA, LEGACY
 
-if os.name != "nt":
+from .helpers import DATA, LEGACY, PLATFORM
+
+if PLATFORM != "win":
     pytest.skip("Windows only", allow_module_level=True)
 
 

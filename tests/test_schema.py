@@ -1,5 +1,4 @@
 import pytest
-from conftest import DATA
 
 # from hypothesis import given, settings, HealthCheck
 # from hypothesis_jsonschema import from_schema
@@ -7,6 +6,8 @@ from pydantic import ValidationError as ValidationErrorV2
 from pydantic.v1 import ValidationError as ValidationErrorV1
 
 from menuinst._schema import BasePlatformSpecific, MenuItem, validate
+
+from .helpers import DATA
 
 # # suppress_health_check=3 --> too_slow
 # @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
