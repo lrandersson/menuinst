@@ -209,6 +209,11 @@
   first_commit: 2025-07-25 08:37:01
   github: Jrice1317
 - name: Robin
-  email: 34315751+lrandersson@users.noreply.github.com
-  num_commits: 1
+  email: randersson@anaconda.com
+  alternate_emails:
+  - 34315751+lrandersson@users.noreply.github.com
+  num_commits: 2
   first_commit: 2025-11-05 11:50:32
+  github: lrandersson
+  aliases:
+  - Robin Andersson
