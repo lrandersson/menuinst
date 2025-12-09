@@ -1,5 +1,17 @@
 [//]: # (current developments)
 
+## 2.4.2 (2025-12-09)
+
+### Contributors
+
+* @marcoesters
+* @lrandersson
+* @conda-bot
+* @dependabot[bot]
+* @pre-commit-ci[bot]
+
+
+
 ## 2.4.1 (2025-10-20)
 
 ### Bug fixes
