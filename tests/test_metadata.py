@@ -8,7 +8,9 @@ from menuinst.api import (
     _install_adapter,
     delete_paths,
     get_recorded_paths,
+    install,
     record_shortcuts,
+    remove,
     remove_shortcut_records,
     write_menuinst_toml,
 )
@@ -325,3 +327,87 @@ class TestDeletePaths:
         assert not existing.exists()
         assert len(deleted) == 1
         assert "missing.lnk" in caplog.text
+
+
+class TestRemoveUsesTomlPaths:
+    """Tests for TOML-based shortcut removal.
+
+    These tests verify the TOML path mechanism works correctly, independent of
+    platform-specific removal behavior. The tests create generic files (not
+    actual .lnk/.desktop/.app) to test that recorded paths are used.
+    """
+
+    def test_remove_uses_recorded_paths(self, tmp_path, monkeypatch):
+        """remove() should delete files at recorded TOML paths, not computed paths.
+
+        This tests the TOML lookup mechanism, not full platform removal flow.
+        """
+        monkeypatch.delenv("MENUINST_DISTRIBUTION_NAME", raising=False)
+        (tmp_path / ".nonadmin").touch()
+        menu_dir = tmp_path / "Menu"
+        menu_dir.mkdir()
+
+        # Create a shortcut file at a "recorded" location
+        recorded_path = tmp_path / "recorded_location" / "MyShortcut.lnk"
+        recorded_path.parent.mkdir(parents=True)
+        recorded_path.touch()
+
+        # Pre-populate TOML with the recorded path
+        write_menuinst_toml(
+            tmp_path,
+            {"shortcuts": [{"source": "test.json", "path": str(recorded_path)}]},
+        )
+
+        # Create JSON that would compute a DIFFERENT path
+        json_file = menu_dir / "test.json"
+        json_file.write_text(
+            json.dumps(
+                {
+                    "$schema": "https://json-schema.org/draft-07/schema",
+                    "menu_name": "Test Menu",
+                    "menu_items": [
+                        {
+                            "name": "MyShortcut",
+                            "command": ["echo", "test"],
+                            "activate": False,
+                            "platforms": {"linux": {}, "win": {}, "osx": {}},
+                        }
+                    ],
+                }
+            )
+        )
+
+        # remove() should delete the file at the recorded path
+        remove(str(json_file), target_prefix=str(tmp_path), base_prefix=str(tmp_path))
+
+        assert not recorded_path.exists(), "File at recorded TOML path should be deleted"
+
+    def test_remove_falls_back_when_no_toml_entries(self, tmp_path, monkeypatch):
+        """remove() should fall back to computed paths when no TOML entries exist."""
+        monkeypatch.delenv("MENUINST_DISTRIBUTION_NAME", raising=False)
+        (tmp_path / ".nonadmin").touch()
+        menu_dir = tmp_path / "Menu"
+        menu_dir.mkdir()
+
+        # Create JSON (no TOML entries for this source)
+        json_file = menu_dir / "test.json"
+        json_file.write_text(
+            json.dumps(
+                {
+                    "$schema": "https://json-schema.org/draft-07/schema",
+                    "menu_name": "Test Menu",
+                    "menu_items": [
+                        {
+                            "name": "MyShortcut",
+                            "command": ["echo", "test"],
+                            "activate": False,
+                            "platforms": {"linux": {}, "win": {}, "osx": {}},
+                        }
+                    ],
+                }
+            )
+        )
+
+        # This should not raise - it should use the fallback path
+        paths = remove(str(json_file), target_prefix=str(tmp_path), base_prefix=str(tmp_path))
+        # No assertion on paths - just verifying no exception
