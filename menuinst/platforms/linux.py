@@ -206,15 +206,23 @@ class LinuxMenuItem(MenuItem):
         self._update_desktop_database()
         return self._paths()
 
-    def remove(self) -> Iterable[os.PathLike]:
-        paths = (path for path in self._paths() if Path(path).is_file())
+    def cleanup_side_effects(self) -> None:
+        """Unregister MIME types and update desktop database."""
         self._maybe_register_mime_types(register=False)
-        if paths:
-            for path in paths:
-                log.debug("Removing %s", path)
-                unlink(path)
-            self._update_desktop_database()
+        self._update_desktop_database()
+
+    def delete_paths(self) -> tuple[Path, ...]:
+        """Delete .desktop file and related MIME XML files."""
+        paths = tuple(path for path in self._paths() if Path(path).is_file())
+        for path in paths:
+            log.debug("Removing %s", path)
+            unlink(path)
         return paths
+
+    def remove(self) -> tuple[Path, ...]:
+        """Remove .desktop file and clean up side effects."""
+        self.cleanup_side_effects()
+        return self.delete_paths()
 
     def _update_desktop_database(self):
         exe = shutil.which("update-desktop-database")

@@ -96,13 +96,22 @@ class MacOSMenuItem(MenuItem):
         self._sign_with_entitlements()
         return (self.location,)
 
-    def remove(self) -> tuple[Path]:
-        log.debug("Removing %s", self.location)
+    def cleanup_side_effects(self) -> None:
+        """Unregister from LaunchServices."""
         self._maybe_register_with_launchservices(register=False)
+
+    def delete_paths(self) -> tuple[Path, ...]:
+        """Delete .app bundle."""
+        log.debug("Removing %s", self.location)
         if self.location.exists():
             shutil.rmtree(self.location, ignore_errors=True)
             return (self.location,)
         return tuple()
+
+    def remove(self) -> tuple[Path, ...]:
+        """Remove .app bundle and clean up side effects."""
+        self.cleanup_side_effects()
+        return self.delete_paths()
 
     def _create_application_tree(self) -> tuple[Path]:
         paths = [

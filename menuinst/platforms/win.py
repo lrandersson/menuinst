@@ -208,7 +208,8 @@ class WindowsMenuItem(MenuItem):
 
         return paths
 
-    def remove(self) -> tuple[Path, ...]:
+    def cleanup_side_effects(self) -> None:
+        """Clean up registry entries, terminal profiles, etc."""
         changed_extensions = self._unregister_file_extensions()
         changed_protocols = self._unregister_url_protocols()
         if changed_extensions or changed_protocols:
@@ -217,12 +218,18 @@ class WindowsMenuItem(MenuItem):
         for location in self.menu.terminal_profile_locations:
             self._add_remove_windows_terminal_profile(location, remove=True)
 
+    def delete_paths(self) -> tuple[Path, ...]:
+        """Delete shortcut files."""
         paths = tuple(path for path in self._paths() if Path(path).is_file())
         for path in paths:
             log.debug("Removing %s", path)
             unlink(path)
-
         return paths
+
+    def remove(self) -> tuple[Path, ...]:
+        """Remove shortcut files and clean up side effects."""
+        self.cleanup_side_effects()
+        return self.delete_paths()
 
     def _paths(self) -> tuple[Path, ...]:
         paths = [self.location]
