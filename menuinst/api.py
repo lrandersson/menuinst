@@ -89,6 +89,13 @@ def remove_shortcut_records(prefix: Path, source: str) -> None:
     write_menuinst_toml(prefix, data)
 
 
+def get_recorded_paths(prefix: Path, source: str) -> list[str]:
+    """Get recorded shortcut paths for a source from menuinst.toml."""
+    data = read_menuinst_toml(prefix)
+    shortcuts = data.get("shortcuts", [])
+    return [s["path"] for s in shortcuts if s.get("source") == source and "path" in s]
+
+
 def _load(
     metadata_or_path: os.PathLike | dict,
     target_prefix: str | None = None,

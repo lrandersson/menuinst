@@ -6,6 +6,7 @@ import pytest
 
 from menuinst.api import (
     _install_adapter,
+    get_recorded_paths,
     record_shortcuts,
     remove_shortcut_records,
     write_menuinst_toml,
@@ -219,3 +220,50 @@ class TestSchemaVersion:
         assert data["schema_version"] == MENUINST_TOML_SCHEMA_VERSION
         # Verify it's a valid SchemaVer string
         parse_schemaver(data["schema_version"])
+
+
+class TestGetRecordedPaths:
+    """Tests for get_recorded_paths()."""
+
+    def test_returns_paths_for_source(self, tmp_path):
+        """Should return paths matching the given source."""
+        write_menuinst_toml(
+            tmp_path,
+            {
+                "shortcuts": [
+                    {"source": "foo.json", "path": "/path/to/foo.lnk"},
+                    {"source": "foo.json", "path": "/path/to/bar.lnk"},
+                    {"source": "baz.json", "path": "/path/to/baz.lnk"},
+                ],
+            },
+        )
+        paths = get_recorded_paths(tmp_path, "foo.json")
+        assert paths == ["/path/to/foo.lnk", "/path/to/bar.lnk"]
+
+    def test_returns_empty_list_when_no_matches(self, tmp_path):
+        """Should return empty list when no shortcuts match source."""
+        write_menuinst_toml(
+            tmp_path,
+            {"shortcuts": [{"source": "other.json", "path": "/path/to/other.lnk"}]},
+        )
+        paths = get_recorded_paths(tmp_path, "foo.json")
+        assert paths == []
+
+    def test_returns_empty_list_when_no_toml(self, tmp_path):
+        """Should return empty list when menuinst.toml doesn't exist."""
+        paths = get_recorded_paths(tmp_path, "foo.json")
+        assert paths == []
+
+    def test_skips_entries_missing_path_key(self, tmp_path):
+        """Should skip shortcuts missing the 'path' key."""
+        write_menuinst_toml(
+            tmp_path,
+            {
+                "shortcuts": [
+                    {"source": "foo.json", "path": "/valid/path.lnk"},
+                    {"source": "foo.json"},  # Missing path key
+                ],
+            },
+        )
+        paths = get_recorded_paths(tmp_path, "foo.json")
+        assert paths == ["/valid/path.lnk"]
