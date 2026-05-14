@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import warnings
 from logging import getLogger
@@ -17,6 +18,7 @@ from .utils import (
     _UserOrSystem,
     elevate_as_needed,
     read_menuinst_toml,
+    unlink,
     user_is_admin,
     write_menuinst_toml,
 )
@@ -94,6 +96,30 @@ def get_recorded_paths(prefix: Path, source: str) -> list[str]:
     data = read_menuinst_toml(prefix)
     shortcuts = data.get("shortcuts", [])
     return [s["path"] for s in shortcuts if s.get("source") == source and "path" in s]
+
+
+def delete_paths(paths: list[str]) -> list[Path]:
+    """Delete files or directories at given paths, warning if not found.
+
+    Handles both files (.lnk, .desktop) and directories (.app bundles on macOS).
+    """
+    deleted = []
+    for path_str in paths:
+        path = Path(path_str)
+        if path.is_file():
+            log.debug("Removing %s", path)
+            unlink(path)
+            deleted.append(path)
+        elif path.is_dir():
+            log.debug("Removing %s", path)
+            shutil.rmtree(path, ignore_errors=True)
+            deleted.append(path)
+        else:
+            log.warning(
+                "Shortcut not found at expected location: %s - may have been moved or deleted",
+                path,
+            )
+    return deleted
 
 
 def _load(

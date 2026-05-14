@@ -6,6 +6,7 @@ import pytest
 
 from menuinst.api import (
     _install_adapter,
+    delete_paths,
     get_recorded_paths,
     record_shortcuts,
     remove_shortcut_records,
@@ -267,3 +268,60 @@ class TestGetRecordedPaths:
         )
         paths = get_recorded_paths(tmp_path, "foo.json")
         assert paths == ["/valid/path.lnk"]
+
+
+class TestDeletePaths:
+    """Tests for delete_paths()."""
+
+    def test_deletes_existing_files(self, tmp_path):
+        """Should delete files that exist and return their paths."""
+        file1 = tmp_path / "foo.lnk"
+        file2 = tmp_path / "bar.lnk"
+        file1.touch()
+        file2.touch()
+
+        deleted = delete_paths([str(file1), str(file2)])
+
+        assert not file1.exists()
+        assert not file2.exists()
+        assert len(deleted) == 2
+
+    def test_deletes_directories(self, tmp_path):
+        """Should delete directories (e.g., .app bundles) using rmtree."""
+        app_dir = tmp_path / "MyApp.app"
+        app_dir.mkdir()
+        (app_dir / "Contents").mkdir()
+        (app_dir / "Contents" / "Info.plist").touch()
+
+        deleted = delete_paths([str(app_dir)])
+
+        assert not app_dir.exists()
+        assert len(deleted) == 1
+
+    def test_warns_on_missing_path(self, tmp_path, caplog):
+        """Should log warning when path doesn't exist."""
+        import logging
+
+        missing = tmp_path / "nonexistent.lnk"
+
+        with caplog.at_level(logging.WARNING):
+            deleted = delete_paths([str(missing)])
+
+        assert len(deleted) == 0
+        assert "Shortcut not found at expected location" in caplog.text
+        assert str(missing) in caplog.text
+
+    def test_partial_deletion(self, tmp_path, caplog):
+        """Should delete existing paths and warn about missing ones."""
+        import logging
+
+        existing = tmp_path / "exists.lnk"
+        missing = tmp_path / "missing.lnk"
+        existing.touch()
+
+        with caplog.at_level(logging.WARNING):
+            deleted = delete_paths([str(existing), str(missing)])
+
+        assert not existing.exists()
+        assert len(deleted) == 1
+        assert "missing.lnk" in caplog.text
