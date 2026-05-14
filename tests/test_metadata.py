@@ -8,7 +8,6 @@ from menuinst.api import (
     _install_adapter,
     delete_paths,
     get_recorded_paths,
-    install,
     record_shortcuts,
     remove,
     remove_shortcut_records,
@@ -409,5 +408,5 @@ class TestRemoveUsesTomlPaths:
         )
 
         # This should not raise - it should use the fallback path
-        paths = remove(str(json_file), target_prefix=str(tmp_path), base_prefix=str(tmp_path))
-        # No assertion on paths - just verifying no exception
+        remove(str(json_file), target_prefix=str(tmp_path), base_prefix=str(tmp_path))
+        # No assertion on return value - just verifying no exception
