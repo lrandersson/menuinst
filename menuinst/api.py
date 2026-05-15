@@ -153,8 +153,11 @@ def install(
 
     paths = []
     paths += menu.create()
+    item_paths = []
     for menu_item in menu_items:
-        paths += menu_item.create()
+        created = menu_item.create()
+        paths += created
+        item_paths += created
 
     # Record shortcuts to menuinst.toml
     # Only record MenuItem paths, not Menu paths (.directory files, etc.)
@@ -163,9 +166,6 @@ def install(
         source = Path(metadata_or_path).name
     else:
         source = f"{menu.name}.json"
-    item_paths = []
-    for menu_item in menu_items:
-        item_paths += menu_item.create()
     record_shortcuts(
         Path(target_prefix),
         Path(base_prefix),
