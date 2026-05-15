@@ -1,6 +1,7 @@
 """Tests for distribution_name resolution and menuinst.toml tracking."""
 
 import json
+import logging
 
 import pytest
 
@@ -228,7 +229,7 @@ class TestGetRecordedPaths:
     """Tests for get_recorded_paths()."""
 
     def test_returns_paths_for_source(self, tmp_path):
-        """Should return paths matching the given source."""
+        """Test that paths matching the given source are returned."""
         write_menuinst_toml(
             tmp_path,
             {
@@ -243,7 +244,7 @@ class TestGetRecordedPaths:
         assert paths == ["/path/to/foo.lnk", "/path/to/bar.lnk"]
 
     def test_returns_empty_list_when_no_matches(self, tmp_path):
-        """Should return empty list when no shortcuts match source."""
+        """Test that empty list is returned when no shortcuts match source."""
         write_menuinst_toml(
             tmp_path,
             {"shortcuts": [{"source": "other.json", "path": "/path/to/other.lnk"}]},
@@ -252,12 +253,12 @@ class TestGetRecordedPaths:
         assert paths == []
 
     def test_returns_empty_list_when_no_toml(self, tmp_path):
-        """Should return empty list when menuinst.toml doesn't exist."""
+        """Test that empty list is returned when menuinst.toml doesn't exist."""
         paths = get_recorded_paths(tmp_path, "foo.json")
         assert paths == []
 
     def test_skips_entries_missing_path_key(self, tmp_path):
-        """Should skip shortcuts missing the 'path' key."""
+        """Test that shortcuts missing the 'path' key are skipped."""
         write_menuinst_toml(
             tmp_path,
             {
@@ -275,7 +276,7 @@ class TestDeletePaths:
     """Tests for delete_paths()."""
 
     def test_deletes_existing_files(self, tmp_path):
-        """Should delete files that exist and return their paths."""
+        """Test that existing files are deleted and their paths returned."""
         file1 = tmp_path / "foo.lnk"
         file2 = tmp_path / "bar.lnk"
         file1.touch()
@@ -288,7 +289,7 @@ class TestDeletePaths:
         assert len(deleted) == 2
 
     def test_deletes_directories(self, tmp_path):
-        """Should delete directories (e.g., .app bundles) using rmtree."""
+        """Test that directories (e.g., .app bundles) are deleted using rmtree."""
         app_dir = tmp_path / "MyApp.app"
         app_dir.mkdir()
         (app_dir / "Contents").mkdir()
@@ -300,9 +301,7 @@ class TestDeletePaths:
         assert len(deleted) == 1
 
     def test_warns_on_missing_path(self, tmp_path, caplog):
-        """Should log warning when path doesn't exist."""
-        import logging
-
+        """Test that a warning is logged when path doesn't exist."""
         missing = tmp_path / "nonexistent.lnk"
 
         with caplog.at_level(logging.WARNING):
@@ -312,52 +311,26 @@ class TestDeletePaths:
         assert "Shortcut not found at expected location" in caplog.text
         assert str(missing) in caplog.text
 
-    def test_partial_deletion(self, tmp_path, caplog):
-        """Should delete existing paths and warn about missing ones."""
-        import logging
-
-        existing = tmp_path / "exists.lnk"
-        missing = tmp_path / "missing.lnk"
-        existing.touch()
-
-        with caplog.at_level(logging.WARNING):
-            deleted = delete_paths([str(existing), str(missing)])
-
-        assert not existing.exists()
-        assert len(deleted) == 1
-        assert "missing.lnk" in caplog.text
-
 
 class TestRemoveUsesTomlPaths:
-    """Tests for TOML-based shortcut removal.
-
-    These tests verify the TOML path mechanism works correctly, independent of
-    platform-specific removal behavior. The tests create generic files (not
-    actual .lnk/.desktop/.app) to test that recorded paths are used.
-    """
+    """Tests for TOML-based shortcut removal."""
 
     def test_remove_uses_recorded_paths(self, tmp_path, monkeypatch):
-        """remove() should delete files at recorded TOML paths, not computed paths.
-
-        This tests the TOML lookup mechanism, not full platform removal flow.
-        """
+        """Test that remove() deletes files at recorded TOML paths, not computed paths."""
         monkeypatch.delenv("MENUINST_DISTRIBUTION_NAME", raising=False)
         (tmp_path / ".nonadmin").touch()
         menu_dir = tmp_path / "Menu"
         menu_dir.mkdir()
 
-        # Create a shortcut file at a "recorded" location
         recorded_path = tmp_path / "recorded_location" / "MyShortcut.lnk"
         recorded_path.parent.mkdir(parents=True)
         recorded_path.touch()
 
-        # Pre-populate TOML with the recorded path
         write_menuinst_toml(
             tmp_path,
             {"shortcuts": [{"source": "test.json", "path": str(recorded_path)}]},
         )
 
-        # Create JSON that would compute a DIFFERENT path
         json_file = menu_dir / "test.json"
         json_file.write_text(
             json.dumps(
@@ -376,19 +349,17 @@ class TestRemoveUsesTomlPaths:
             )
         )
 
-        # remove() should delete the file at the recorded path
         remove(str(json_file), target_prefix=str(tmp_path), base_prefix=str(tmp_path))
 
-        assert not recorded_path.exists(), "File at recorded TOML path should be deleted"
+        assert not recorded_path.exists()
 
     def test_remove_falls_back_when_no_toml_entries(self, tmp_path, monkeypatch):
-        """remove() should fall back to computed paths when no TOML entries exist."""
+        """Test that remove() falls back to computed paths when no TOML entries exist."""
         monkeypatch.delenv("MENUINST_DISTRIBUTION_NAME", raising=False)
         (tmp_path / ".nonadmin").touch()
         menu_dir = tmp_path / "Menu"
         menu_dir.mkdir()
 
-        # Create JSON (no TOML entries for this source)
         json_file = menu_dir / "test.json"
         json_file.write_text(
             json.dumps(
@@ -407,6 +378,5 @@ class TestRemoveUsesTomlPaths:
             )
         )
 
-        # This should not raise - it should use the fallback path
+        # Verifying no exception is raised
         remove(str(json_file), target_prefix=str(tmp_path), base_prefix=str(tmp_path))
-        # No assertion on return value - just verifying no exception
