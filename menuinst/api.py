@@ -86,21 +86,20 @@ def remove_shortcut_records(prefix: Path, source: str) -> None:
     write_menuinst_toml(prefix, data)
 
 
-def get_recorded_paths(prefix: Path, source: str) -> list[str]:
+def get_recorded_paths(prefix: Path, source: str) -> list[Path]:
     """Get recorded shortcut paths for a source from menuinst.toml."""
     data = read_menuinst_toml(prefix)
     shortcuts = data.get("shortcuts", [])
-    return [s["path"] for s in shortcuts if s.get("source") == source and "path" in s]
+    return [Path(s["path"]) for s in shortcuts if s.get("source") == source and "path" in s]
 
 
-def delete_paths(paths: list[str]) -> list[Path]:
+def delete_paths(paths: list[Path]) -> list[Path]:
     """Delete files or directories at given paths, warning if not found.
 
     Handles both files (.lnk, .desktop) and directories (.app bundles on macOS).
     """
     deleted = []
-    for path_str in paths:
-        path = Path(path_str)
+    for path in paths:
         if path.is_file():
             log.debug("Removing %s", path)
             unlink(path)

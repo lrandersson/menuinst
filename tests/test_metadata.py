@@ -2,6 +2,7 @@
 
 import json
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -241,7 +242,7 @@ class TestGetRecordedPaths:
             },
         )
         paths = get_recorded_paths(tmp_path, "foo.json")
-        assert paths == ["/path/to/foo.lnk", "/path/to/bar.lnk"]
+        assert paths == [Path("/path/to/foo.lnk"), Path("/path/to/bar.lnk")]
 
     def test_returns_empty_list_when_no_matches(self, tmp_path):
         """Test that empty list is returned when no shortcuts match source."""
@@ -269,7 +270,7 @@ class TestGetRecordedPaths:
             },
         )
         paths = get_recorded_paths(tmp_path, "foo.json")
-        assert paths == ["/valid/path.lnk"]
+        assert paths == [Path("/valid/path.lnk")]
 
 
 class TestDeletePaths:
@@ -282,7 +283,7 @@ class TestDeletePaths:
         file1.touch()
         file2.touch()
 
-        deleted = delete_paths([str(file1), str(file2)])
+        deleted = delete_paths([file1, file2])
 
         assert not file1.exists()
         assert not file2.exists()
@@ -295,7 +296,7 @@ class TestDeletePaths:
         (app_dir / "Contents").mkdir()
         (app_dir / "Contents" / "Info.plist").touch()
 
-        deleted = delete_paths([str(app_dir)])
+        deleted = delete_paths([app_dir])
 
         assert not app_dir.exists()
         assert len(deleted) == 1
@@ -305,7 +306,7 @@ class TestDeletePaths:
         missing = tmp_path / "nonexistent.lnk"
 
         with caplog.at_level(logging.WARNING):
-            deleted = delete_paths([str(missing)])
+            deleted = delete_paths([missing])
 
         assert len(deleted) == 0
         assert "Shortcut not found at expected location" in caplog.text
@@ -315,9 +316,8 @@ class TestDeletePaths:
 class TestRemoveUsesTomlPaths:
     """Tests for TOML-based shortcut removal."""
 
-    def test_remove_uses_recorded_paths(self, tmp_path, monkeypatch):
+    def test_remove_uses_recorded_paths(self, tmp_path):
         """Test that remove() deletes files at recorded TOML paths, not computed paths."""
-        monkeypatch.delenv("MENUINST_DISTRIBUTION_NAME", raising=False)
         (tmp_path / ".nonadmin").touch()
         menu_dir = tmp_path / "Menu"
         menu_dir.mkdir()
