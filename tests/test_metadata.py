@@ -10,6 +10,7 @@ from menuinst.api import (
     _install_adapter,
     delete_paths,
     get_recorded_paths,
+    install,
     record_shortcuts,
     remove,
     remove_shortcut_records,
@@ -378,5 +379,19 @@ class TestRemoveUsesTomlPaths:
             )
         )
 
-        # Verifying no exception is raised
+        # Install shortcuts
+        paths = install(str(json_file), target_prefix=str(tmp_path), base_prefix=str(tmp_path))
+        shortcut_paths = [
+            p for p in paths if Path(p).suffix in (".lnk", ".desktop") or Path(p).is_dir()
+        ]
+        assert shortcut_paths, "Expected at least one shortcut to be created"
+
+        # Clear TOML to simulate legacy install (pre-TOML tracking)
+        write_menuinst_toml(tmp_path, {})
+
+        # Remove should use fallback computed paths
         remove(str(json_file), target_prefix=str(tmp_path), base_prefix=str(tmp_path))
+
+        # Verify shortcuts were removed
+        for p in shortcut_paths:
+            assert not Path(p).exists(), f"Shortcut should have been removed: {p}"
