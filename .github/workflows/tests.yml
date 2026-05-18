@@ -1,14 +1,14 @@
 name: Tests
 
+# TODO: REVERT - temporarily allow PR tests on fork branches
 on:
   push:
     branches:
       - main
+      - dev-ra-829-2
     paths-ignore:
       - "docs/**"
   pull_request:
-    branches:
-      - main
     paths-ignore:
       - "docs/**"
 

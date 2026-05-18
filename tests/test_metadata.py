@@ -1,12 +1,18 @@
 """Tests for distribution_name resolution and menuinst.toml tracking."""
 
 import json
+import logging
+from pathlib import Path
 
 import pytest
 
 from menuinst.api import (
     _install_adapter,
+    delete_paths,
+    get_recorded_paths,
+    install,
     record_shortcuts,
+    remove,
     remove_shortcut_records,
     write_menuinst_toml,
 )
@@ -219,3 +225,173 @@ class TestSchemaVersion:
         assert data["schema_version"] == MENUINST_TOML_SCHEMA_VERSION
         # Verify it's a valid SchemaVer string
         parse_schemaver(data["schema_version"])
+
+
+class TestGetRecordedPaths:
+    """Tests for get_recorded_paths()."""
+
+    def test_returns_paths_for_source(self, tmp_path):
+        """Test that paths matching the given source are returned."""
+        write_menuinst_toml(
+            tmp_path,
+            {
+                "shortcuts": [
+                    {"source": "foo.json", "path": "/path/to/foo.lnk"},
+                    {"source": "foo.json", "path": "/path/to/bar.lnk"},
+                    {"source": "baz.json", "path": "/path/to/baz.lnk"},
+                ],
+            },
+        )
+        paths = get_recorded_paths(tmp_path, "foo.json")
+        assert paths == [Path("/path/to/foo.lnk"), Path("/path/to/bar.lnk")]
+
+    def test_returns_empty_list_when_no_matches(self, tmp_path):
+        """Test that empty list is returned when no shortcuts match source."""
+        write_menuinst_toml(
+            tmp_path,
+            {"shortcuts": [{"source": "other.json", "path": "/path/to/other.lnk"}]},
+        )
+        paths = get_recorded_paths(tmp_path, "foo.json")
+        assert paths == []
+
+    def test_returns_empty_list_when_no_toml(self, tmp_path):
+        """Test that empty list is returned when menuinst.toml doesn't exist."""
+        paths = get_recorded_paths(tmp_path, "foo.json")
+        assert paths == []
+
+    def test_skips_entries_missing_path_key(self, tmp_path):
+        """Test that shortcuts missing the 'path' key are skipped."""
+        write_menuinst_toml(
+            tmp_path,
+            {
+                "shortcuts": [
+                    {"source": "foo.json", "path": "/valid/path.lnk"},
+                    {"source": "foo.json"},  # Missing path key
+                ],
+            },
+        )
+        paths = get_recorded_paths(tmp_path, "foo.json")
+        assert paths == [Path("/valid/path.lnk")]
+
+
+class TestDeletePaths:
+    """Tests for delete_paths()."""
+
+    def test_deletes_existing_files(self, tmp_path):
+        """Test that existing files are deleted and their paths returned."""
+        file1 = tmp_path / "foo.lnk"
+        file2 = tmp_path / "bar.lnk"
+        file1.touch()
+        file2.touch()
+
+        deleted = delete_paths([file1, file2])
+
+        assert not file1.exists()
+        assert not file2.exists()
+        assert len(deleted) == 2
+
+    def test_deletes_directories(self, tmp_path):
+        """Test that directories (e.g., .app bundles) are deleted using rmtree."""
+        app_dir = tmp_path / "MyApp.app"
+        app_dir.mkdir()
+        (app_dir / "Contents").mkdir()
+        (app_dir / "Contents" / "Info.plist").touch()
+
+        deleted = delete_paths([app_dir])
+
+        assert not app_dir.exists()
+        assert len(deleted) == 1
+
+    def test_warns_on_missing_path(self, tmp_path, caplog):
+        """Test that a warning is logged when path doesn't exist."""
+        missing = tmp_path / "nonexistent.lnk"
+
+        with caplog.at_level(logging.WARNING):
+            deleted = delete_paths([missing])
+
+        assert len(deleted) == 0
+        assert "Shortcut not found at expected location" in caplog.text
+        assert str(missing) in caplog.text
+
+
+class TestRemoveUsesTomlPaths:
+    """Tests for TOML-based shortcut removal."""
+
+    def test_remove_uses_recorded_paths(self, tmp_path):
+        """Test that remove() deletes files at recorded TOML paths, not computed paths."""
+        (tmp_path / ".nonadmin").touch()
+        menu_dir = tmp_path / "Menu"
+        menu_dir.mkdir()
+
+        recorded_path = tmp_path / "recorded_location" / "MyShortcut.lnk"
+        recorded_path.parent.mkdir(parents=True)
+        recorded_path.touch()
+
+        write_menuinst_toml(
+            tmp_path,
+            {"shortcuts": [{"source": "test.json", "path": str(recorded_path)}]},
+        )
+
+        json_file = menu_dir / "test.json"
+        json_file.write_text(
+            json.dumps(
+                {
+                    "$schema": "https://json-schema.org/draft-07/schema",
+                    "menu_name": "Test Menu",
+                    "menu_items": [
+                        {
+                            "name": "MyShortcut",
+                            "command": ["echo", "test"],
+                            "activate": False,
+                            "platforms": {"linux": {}, "win": {}, "osx": {}},
+                        }
+                    ],
+                }
+            )
+        )
+
+        remove(str(json_file), target_prefix=str(tmp_path), base_prefix=str(tmp_path))
+
+        assert not recorded_path.exists()
+
+    def test_remove_falls_back_when_no_toml_entries(self, tmp_path, monkeypatch):
+        """Test that remove() falls back to computed paths when no TOML entries exist."""
+        monkeypatch.delenv("MENUINST_DISTRIBUTION_NAME", raising=False)
+        (tmp_path / ".nonadmin").touch()
+        menu_dir = tmp_path / "Menu"
+        menu_dir.mkdir()
+
+        json_file = menu_dir / "test.json"
+        json_file.write_text(
+            json.dumps(
+                {
+                    "$schema": "https://json-schema.org/draft-07/schema",
+                    "menu_name": "Test Menu",
+                    "menu_items": [
+                        {
+                            "name": "MyShortcut",
+                            "command": ["echo", "test"],
+                            "activate": False,
+                            "platforms": {"linux": {}, "win": {}, "osx": {}},
+                        }
+                    ],
+                }
+            )
+        )
+
+        # Install shortcuts
+        paths = install(str(json_file), target_prefix=str(tmp_path), base_prefix=str(tmp_path))
+        shortcut_paths = [
+            p for p in paths if Path(p).suffix in (".lnk", ".desktop") or Path(p).is_dir()
+        ]
+        assert shortcut_paths, "Expected at least one shortcut to be created"
+
+        # Clear TOML to simulate legacy install (pre-TOML tracking)
+        write_menuinst_toml(tmp_path, {})
+
+        # Remove should use fallback computed paths
+        remove(str(json_file), target_prefix=str(tmp_path), base_prefix=str(tmp_path))
+
+        # Verify shortcuts were removed
+        for p in shortcut_paths:
+            assert not Path(p).exists(), f"Shortcut should have been removed: {p}"

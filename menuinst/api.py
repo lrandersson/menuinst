@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import warnings
 from logging import getLogger
@@ -17,6 +18,7 @@ from .utils import (
     _UserOrSystem,
     elevate_as_needed,
     read_menuinst_toml,
+    unlink,
     user_is_admin,
     write_menuinst_toml,
 )
@@ -66,12 +68,7 @@ def record_shortcuts(
 
 
 def remove_shortcut_records(prefix: Path, source: str) -> None:
-    """Remove shortcut entries matching source from menuinst.toml.
-
-    TODO: Use the recorded paths as the source of truth for shortcut removal,
-    instead of recomputing paths from menu JSON metadata. This would handle
-    cases where shortcuts were moved or the menu JSON changed.
-    """
+    """Remove shortcut entries matching source from menuinst.toml."""
     data = read_menuinst_toml(prefix)
     if not data:
         return
@@ -87,6 +84,36 @@ def remove_shortcut_records(prefix: Path, source: str) -> None:
 
     data["shortcuts"] = filtered
     write_menuinst_toml(prefix, data)
+
+
+def get_recorded_paths(prefix: Path, source: str) -> list[Path]:
+    """Get recorded shortcut paths for a source from menuinst.toml."""
+    data = read_menuinst_toml(prefix)
+    shortcuts = data.get("shortcuts", [])
+    return [Path(s["path"]) for s in shortcuts if s.get("source") == source and "path" in s]
+
+
+def delete_paths(paths: list[Path]) -> list[Path]:
+    """Delete files or directories at given paths, warning if not found.
+
+    Handles both files (.lnk, .desktop) and directories (.app bundles on macOS).
+    """
+    deleted = []
+    for path in paths:
+        if path.is_file():
+            log.debug("Removing %s", path)
+            unlink(path)
+            deleted.append(path)
+        elif path.is_dir():
+            log.debug("Removing %s", path)
+            shutil.rmtree(path, ignore_errors=True)
+            deleted.append(path)
+        else:
+            log.warning(
+                "Shortcut not found at expected location: %s - may have been moved or deleted",
+                path,
+            )
+    return deleted
 
 
 def _load(
@@ -125,10 +152,15 @@ def install(
 
     paths = []
     paths += menu.create()
+    item_paths = []
     for menu_item in menu_items:
-        paths += menu_item.create()
+        created = menu_item.create()
+        paths += created
+        item_paths += created
 
     # Record shortcuts to menuinst.toml
+    # Only record MenuItem paths, not Menu paths (.directory files, etc.)
+    # The Menu's remove() method handles its own cleanup logic
     if isinstance(metadata_or_path, (str, Path)):
         source = Path(metadata_or_path).name
     else:
@@ -137,7 +169,7 @@ def install(
         Path(target_prefix),
         Path(base_prefix),
         source,
-        paths,
+        item_paths,
         distribution_name=menu.placeholders.get("DISTRIBUTION_NAME"),
     )
 
@@ -154,29 +186,46 @@ def remove(
 ) -> list[os.PathLike]:
     target_prefix = target_prefix or DEFAULT_PREFIX
     base_prefix = base_prefix or DEFAULT_BASE_PREFIX
+
+    # When running as admin with .nonadmin marker, force user mode
+    # This ensures Menu and MenuItem objects use correct paths
+    if _maybe_try_user(target_prefix, base_prefix):
+        _mode = "user"
+
     menu, menu_items = _load(metadata_or_path, target_prefix, base_prefix, _mode)
     menu_items = [item for item in menu_items if item.enabled_for_platform()]
     if not menu_items:
         warnings.warn(f"Metadata for {menu.name} is not enabled for {sys.platform}")
         return []
 
-    paths = []
-    for menu_item in menu_items:
-        paths += menu_item.remove()
-    paths += menu.remove()
-
-    if not paths and _maybe_try_user(target_prefix, base_prefix):
-        menu, menu_items = _load(metadata_or_path, target_prefix, base_prefix, "user")
-        menu_items = [item for item in menu_items if item.enabled_for_platform()]
-        for menu_item in menu_items:
-            paths += menu_item.remove()
-        paths += menu.remove()
-
-    # Remove shortcut records from menuinst.toml
+    # Determine source name for TOML lookup
     if isinstance(metadata_or_path, (str, Path)):
         source = Path(metadata_or_path).name
     else:
         source = f"{menu.name}.json"
+
+    # 1. Delete MenuItem shortcut files (.lnk, .desktop, .app)
+    recorded_paths = get_recorded_paths(Path(target_prefix), source)
+    if recorded_paths:
+        paths = delete_paths(recorded_paths)
+    else:
+        # Fallback for shortcuts created before menuinst.toml tracking existed.
+        # This ensures backwards compatibility when upgrading menuinst after
+        # packages with shortcuts were already installed.
+        paths = []
+        for menu_item in menu_items:
+            paths.extend(menu_item.delete_paths())
+
+    # 2. Side-effect cleanup (registry, LaunchServices, MIME types)
+    for menu_item in menu_items:
+        menu_item.cleanup_side_effects()
+
+    # 3. Menu directory cleanup (.directory files, etc.)
+    # The Menu handles its own removal logic (e.g., only removes .directory
+    # if no other shortcuts from the same menu exist)
+    paths.extend(menu.remove())
+
+    # 4. Update TOML records
     remove_shortcut_records(Path(target_prefix), source)
 
     return paths
